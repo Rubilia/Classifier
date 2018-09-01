@@ -11,7 +11,6 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.parallelism.ParallelWrapper;
-import org.nd4j.jita.conf.CudaEnvironment;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
@@ -40,10 +39,10 @@ public class Main {
     static List<File> carFiles, flowerFiles, airplaneFiles;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
     public static void main(String[] args) throws Exception{
-        CudaEnvironment.getInstance().getConfiguration().allowMultiGPU(true).setMaximumDeviceCache(2L * 1024L * 1024L * 1024L).allowCrossDeviceAccess(true);
-        carFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\car\\");
-        flowerFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\flower\\");
-        airplaneFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\airplane");
+
+        carFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\car");
+        flowerFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\flower");
+        airplaneFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\airplane\\");
         int nChannels = 1;
         int outputNum = 3;
         int batchSize = 128;
@@ -54,6 +53,7 @@ public class Main {
         Train = setImagesTrain((ImageDataSetIterator) Train);
         DataSetIterator Test = new ImageDataSetIterator(batchSize, 100, 100, 3);
         Test = setImagesTest((ImageDataSetIterator) Test);
+
         System.out.println("Build model....");
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
             .seed(seed)
