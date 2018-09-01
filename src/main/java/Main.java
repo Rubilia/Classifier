@@ -48,13 +48,7 @@ public class Main {
         int batchSize = 128;
         int nEpochs = 9;
         int seed = (new Random()).nextInt();
-        System.out.println("Load data....");
-        DataSetIterator Train = new ImageDataSetIterator(batchSize, 100, 100, 3);
-        Train = setImagesTrain((ImageDataSetIterator) Train);
-        DataSetIterator Test = new ImageDataSetIterator(batchSize, 100, 100, 3);
-        Test = setImagesTest((ImageDataSetIterator) Test);
-
-        System.out.println("Build model....");
+        System.out.println("Building model....");
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
             .seed(seed)
             .l2(0.0005)
@@ -97,6 +91,11 @@ public class Main {
             .backprop(true).pretrain(false).build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
+        System.out.println("Loading data....");
+        DataSetIterator Train = new ImageDataSetIterator(batchSize, 100, 100, 3);
+        Train = setImagesTrain((ImageDataSetIterator) Train);
+        DataSetIterator Test = new ImageDataSetIterator(batchSize, 100, 100, 3);
+        Test = setImagesTest((ImageDataSetIterator) Test);
 
         // ParallelWrapper will take care of load balancing between GPUs.
         ParallelWrapper wrapper = new ParallelWrapper.Builder(model)
