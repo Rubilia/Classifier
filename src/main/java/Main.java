@@ -14,6 +14,7 @@ import org.deeplearning4j.parallelism.ParallelWrapper;
 import org.nd4j.jita.conf.CudaEnvironment;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.cpu.nativecpu.NDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
 import org.nd4j.linalg.learning.config.Nesterovs;
@@ -34,6 +35,8 @@ import java.util.Random;
  */
 
 public class Main {
+    private static int picturesPerIteration = 60;
+    private static int iterationsAmount = 9;
     private static int car_correct = 500;
     private static int flower_correct = 840;
     private static int airplane_correct = 530;
@@ -49,55 +52,59 @@ public class Main {
         int nChannels = 1;
         int outputNum = 3;
         int batchSize = 128;
-        int nEpochs = 1;
+        int nEpochs = 5;
+        int inputHeight = 100, inputWidth  = 100;
         int seed = (new Random()).nextInt();
         System.out.println("Building model....");
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
-            .seed(seed)
-            .l2(0.0005)
-            .weightInit(WeightInit.XAVIER)
-            .updater(new Nesterovs.Builder().learningRate(.01).build())
-            .biasUpdater(new Nesterovs.Builder().learningRate(0.02).build())
-            .list()
-            .layer(0, new ConvolutionLayer.Builder(11, 11)
-                //nIn and nOut specify depth. nIn here is the nChannels and nOut is the number of filters to be applied
-                .nIn(nChannels)
-                .stride(1, 1)
-                .nOut(128)
-                .activation(Activation.IDENTITY)
-                .build())
-            .layer(1, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
-                .kernelSize(2,2)
-                .stride(2,2)
-                .build())
-            .layer(2, new ConvolutionLayer.Builder(8, 8)
-                //Note that nIn need not be specified in later layers
-                .stride(1, 1)
-                .nOut(256)
-                .activation(Activation.IDENTITY)
-                .build())
-            .layer(3, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
-                .kernelSize(2,2)
-                .stride(2,2)
-                .build())
-            .layer(4, new ConvolutionLayer.Builder(4, 4)
-            .stride(1, 1)
-            .nOut(128)
-            .activation(Activation.IDENTITY).build())
-            .layer(5, new DenseLayer.Builder().activation(Activation.RELU)
-                .nOut(300).build())
-            .layer(6, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
-                .nOut(outputNum)
-                .activation(Activation.SOFTMAX)
-                .build())
-            .setInputType(InputType.convolutionalFlat(100,100,1)) //See note below
-            .backprop(true).pretrain(false).build();
+                .seed(seed)
+                .l2(0.0005)
+                .weightInit(WeightInit.XAVIER)
+                .updater(new Nesterovs.Builder().learningRate(.01).build())
+                .biasUpdater(new Nesterovs.Builder().learningRate(0.02).build())
+                .list()
+                .layer(0, new ConvolutionLayer.Builder(11, 11)
+                        //nIn and nOut specify depth. nIn here is the nChannels and nOut is the number of filters to be applied
+                        .nIn(nChannels)
+                        .stride(1, 1)
+                        .nOut(128)
+                        .activation(Activation.IDENTITY)
+                        .build())
+                .layer(1, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
+                        .kernelSize(2,2)
+                        .stride(2,2)
+                        .build())
+                .layer(2, new ConvolutionLayer.Builder(8, 8)
+                        //Note that nIn need not be specified in later layers
+                        .stride(1, 1)
+                        .nOut(256)
+                        .activation(Activation.IDENTITY)
+                        .build())
+                .layer(3, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
+                        .kernelSize(2,2)
+                        .stride(2,2)
+                        .build())
+                .layer(4, new ConvolutionLayer.Builder(4, 4)
+                        .stride(1, 1)
+                        .nOut(128)
+                        .activation(Activation.IDENTITY).build())
+                .layer(5, new DenseLayer.Builder().activation(Activation.RELU)
+                        .nOut(300).build())
+                .layer(6, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
+                        .nOut(outputNum)
+                        .activation(Activation.SOFTMAX)
+                        .build())
+                .setInputType(InputType.convolutionalFlat(100,100,1)) //See note below
+                .backprop(true).pretrain(false).build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
         System.out.println("Loading data....");
-        DataSetIterator Train = new ImageDataSetIterator(batchSize, 100, 100, 3);
-        Train = setImagesTrain((ImageDataSetIterator) Train);
-        DataSetIterator Test = new ImageDataSetIterator(batchSize, 100, 100, 3);
+        List<DataSetIterator> data = new ArrayList<>();
+        for (int i = 0; i < iterationsAmount; i++) {
+            DataSetIterator Train = new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3);
+            data.add(setImagesTrain((ImageDataSetIterator) Train, i));
+        }
+        DataSetIterator Test = new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3);
         Test = setImagesTest((ImageDataSetIterator) Test);
 
         // ParallelWrapper will take care of load balancing between GPUs.
@@ -115,7 +122,6 @@ public class Main {
             .reportScoreAfterAveraging(true)
 
             .build();
-
         System.out.println("Training model....");
         model.setListeners(new ScoreIterationListener(100));
         long timeX = System.currentTimeMillis();
@@ -124,13 +130,13 @@ public class Main {
         //MultipleEpochsIterator mnistMultiEpochIterator = new MultipleEpochsIterator(nEpochs, mnistTrain);
 
         for( int i=0; i<nEpochs; i++ ) {
+            System.out.println("new Epoch " + i);
             long time1 = System.currentTimeMillis();
-            for (int j = 0; j < 5; j++) {
-
-            }
             // Please note: we're feeding ParallelWrapper with iterator, not model directly
 //            wrapper.fit(mnistMultiEpochIterator);
-            wrapper.fit(Train);
+            for (int j = 0; j < iterationsAmount; j++) {
+                wrapper.fit(data.get(j));
+            }
             long time2 = System.currentTimeMillis();
             System.out.printf("*** Completed epoch {}, time: {} ***", i, (time2 - time1)/1000 + " sec");
         }
@@ -161,22 +167,22 @@ public class Main {
         return ret;
     }
 
-    static ImageDataSetIterator setImagesTrain(ImageDataSetIterator input) throws InterruptedException {
+    static ImageDataSetIterator setImagesTrain(ImageDataSetIterator input, int iteration) {
         ArrayList<String> paths = new ArrayList<>();
         ArrayList<double[]> outs = new ArrayList<>();
-        for (int i = 0; i < car_correct; i++) {
+        for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(carFiles.get(i).getAbsolutePath());
             outs.add(new double[]{1.0, 0.0, 0.0});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
-        for (int i = 0; i < flower_correct; i++) {
+        for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(flowerFiles.get(i).getAbsolutePath());
             outs.add(new double[]{0.0, 1.0, 0.0});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
-        for (int i = 0; i < airplane_correct; i++) {
+        for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(airplaneFiles.get(i).getAbsolutePath());
             outs.add(new double[]{0.0, 0.0, 1.0});
         }
@@ -184,7 +190,8 @@ public class Main {
         return input;
     }
 
-    static ImageDataSetIterator setImagesTest(ImageDataSetIterator input) throws InterruptedException {
+
+    static ImageDataSetIterator setImagesTest(ImageDataSetIterator input) {
         ArrayList<String> paths = new ArrayList<>();
         ArrayList<double[]> outs = new ArrayList<>();
         for (int i = car_correct; i < carFiles.size(); i++) {
