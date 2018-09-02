@@ -11,6 +11,7 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.parallelism.ParallelWrapper;
+import org.nd4j.jita.conf.CudaEnvironment;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
@@ -39,14 +40,16 @@ public class Main {
     static List<File> carFiles, flowerFiles, airplaneFiles;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
     public static void main(String[] args) throws Exception{
-
+        System.setProperty("org.bytedeco.javacpp.maxphysicalbytes", "0");
+        System.setProperty("org.bytedeco.javacpp.maxbytes", "0");
+        CudaEnvironment.getInstance().getConfiguration().allowMultiGPU(true).setMaximumDeviceCache(2L * 1024L * 1024L * 1024L).allowCrossDeviceAccess(true);
         carFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\car");
         flowerFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\flower");
         airplaneFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\airplane\\");
         int nChannels = 1;
         int outputNum = 3;
         int batchSize = 128;
-        int nEpochs = 9;
+        int nEpochs = 1;
         int seed = (new Random()).nextInt();
         System.out.println("Building model....");
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
@@ -100,10 +103,10 @@ public class Main {
         // ParallelWrapper will take care of load balancing between GPUs.
         ParallelWrapper wrapper = new ParallelWrapper.Builder(model)
             // DataSets prefetching options. Set this value with respect to number of actual devices
-            .prefetchBuffer(24*2)
+            .prefetchBuffer(128)
 
             // set number of workers equal to number of available devices. x1-x2 are good values to start with
-            .workers(2)
+            .workers(3 )
 
             // rare averaging improves performance, but might reduce model accuracy
             .averagingFrequency(2)
