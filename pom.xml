@@ -55,6 +55,11 @@
             <artifactId>deeplearning4j-core</artifactId>
             <version>1.0.0-beta</version>
         </dependency>
-        </dependencies>
+        <dependency>
+            <groupId>com.github.adedayo.intellij.sdk</groupId>
+            <artifactId>javaFX</artifactId>
+            <version>142.1</version>
+        </dependency>
+    </dependencies>
 
 </project>

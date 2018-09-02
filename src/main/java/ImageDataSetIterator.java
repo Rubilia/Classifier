@@ -16,12 +16,12 @@ public class ImageDataSetIterator extends BaseDatasetIterator {
         this.fetcher = fetcher;
     }
 
-    public void addDataString(List<String> paths, List<double[]> out) throws InterruptedException {
+    public void addDataString(List<String> paths, List<double[]> out) {
         fetcher.addStringData(paths, out);
         super.numExamples = fetcher.totalExamples();
     }
 
-    public void addDataImage(List<BufferedImage> paths, List<double[]> out) throws InterruptedException {
+    public void addDataImage(List<BufferedImage> paths, List<double[]> out) {
         fetcher.addImageData(paths, out);
         super.numExamples = fetcher.totalExamples();
     }

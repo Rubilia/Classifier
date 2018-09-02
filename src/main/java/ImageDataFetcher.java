@@ -9,6 +9,7 @@ import java.awt.image.PixelGrabber;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ImageDataFetcher extends BaseDataFetcher {
@@ -25,7 +26,7 @@ public class ImageDataFetcher extends BaseDataFetcher {
         this.inputColumns = height*width;
     }
 
-    public void addStringData(List<String> paths, List<double[]> outputs) throws InterruptedException {
+    public void addStringData(List<String> paths, List<double[]> outputs) {
         List<BufferedImage> list = new ArrayList<>();
         for (int i = 0; i < paths.size(); i++) {
             try {
@@ -38,7 +39,7 @@ public class ImageDataFetcher extends BaseDataFetcher {
         addImageData(list, outputs);
     }
 
-    public void addImageData(List<BufferedImage> input, List<double[]> output) throws InterruptedException {
+    public void addImageData(List<BufferedImage> input, List<double[]> output) {
         List<double[]> imgData = convertData(input);
         List<Integer> wrongIndexes = new ArrayList<>();
         for (int i = 0; i < imgData.size(); i++) {
@@ -53,10 +54,25 @@ public class ImageDataFetcher extends BaseDataFetcher {
         }
         inputs.addAll(newInputs);
         outputs.addAll(newOuts);
+        dataStorage<List<double[]>, List<double[]>> mixedData = mixData(inputs, outputs);
+        inputs = mixedData.getKey();
+        outputs = mixedData.getValue();
         this.totalExamples = inputs.size();
     }
 
-    public List<double[]> convertData(List<BufferedImage> input) throws InterruptedException {
+    private dataStorage<List<double[]>, List<double[]>> mixData(List<double[]> inps, List<double[]> outs){
+        List<Integer> indexes =new ArrayList<>();
+        for (int i = 0; i < inps.size(); i++) { indexes.add(i); }
+        Collections.shuffle(indexes);
+        List<double[]> mixedInps = new ArrayList<>(), mixedOuts = new ArrayList<>();
+        for(int index: indexes){
+            mixedInps.add(inps.get(index).clone());
+            mixedOuts.add(outs.get(index).clone());
+        }
+        return new dataStorage<>(mixedInps, mixedOuts);
+    }
+
+    public List<double[]> convertData(List<BufferedImage> input) {
         List<double[]> ret = new ArrayList<>();
         for (int i = 0; i < input.size(); i++) {
             ret.add(extractImage(input.get(i)));
@@ -64,7 +80,7 @@ public class ImageDataFetcher extends BaseDataFetcher {
         return ret;
     }
 
-    public double[] extractImage(BufferedImage image) throws InterruptedException {
+    public double[] extractImage(BufferedImage image) {
         try {
             BufferedImage dimg = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = dimg.createGraphics();
@@ -75,6 +91,11 @@ public class ImageDataFetcher extends BaseDataFetcher {
             PixelGrabber pgb = new PixelGrabber(dimg, 0, 0, width, height, prePixels, 0, width);
             pgb.grabPixels();
             double[] pixels = new double[height*width];
+            int counter = 0;
+            for(int item: prePixels){
+                pixels[counter] = -13* Math.pow(10, -8)*(double)item-1.2;
+                counter++;
+            }
             return pixels;
         }catch (Exception e){return null;}
 
@@ -95,4 +116,15 @@ public class ImageDataFetcher extends BaseDataFetcher {
         INDArray in = Nd4j.create(inps), out  = Nd4j.create(outs);
         this.curr = new DataSet(in, out);
     }
+}
+
+class dataStorage<K, M>{
+    private K key;
+    private M value;
+    public dataStorage(K key, M value) {
+        this.key = key;
+        this.value = value;
+    }
+    public K getKey(){return key;}
+    public M getValue(){return value;}
 }

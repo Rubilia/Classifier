@@ -106,7 +106,7 @@ public class Main {
             .prefetchBuffer(128)
 
             // set number of workers equal to number of available devices. x1-x2 are good values to start with
-            .workers(3 )
+            .workers(3)
 
             // rare averaging improves performance, but might reduce model accuracy
             .averagingFrequency(2)
@@ -116,7 +116,7 @@ public class Main {
 
             .build();
 
-        System.out.println("Train model....");
+        System.out.println("Training model....");
         model.setListeners(new ScoreIterationListener(100));
         long timeX = System.currentTimeMillis();
 
@@ -125,12 +125,14 @@ public class Main {
 
         for( int i=0; i<nEpochs; i++ ) {
             long time1 = System.currentTimeMillis();
+            for (int j = 0; j < 5; j++) {
 
+            }
             // Please note: we're feeding ParallelWrapper with iterator, not model directly
 //            wrapper.fit(mnistMultiEpochIterator);
             wrapper.fit(Train);
             long time2 = System.currentTimeMillis();
-            System.out.printf("*** Completed epoch {}, time: {} ***", i, (time2 - time1));
+            System.out.printf("*** Completed epoch {}, time: {} ***", i, (time2 - time1)/1000 + " sec");
         }
         long timeY = System.currentTimeMillis();
 
