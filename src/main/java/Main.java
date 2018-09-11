@@ -7,10 +7,15 @@ import org.deeplearning4j.nn.conf.layers.ConvolutionLayer;
 import org.deeplearning4j.nn.conf.layers.DenseLayer;
 import org.deeplearning4j.nn.conf.layers.OutputLayer;
 import org.deeplearning4j.nn.conf.layers.SubsamplingLayer;
+import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.nn.weights.WeightInit;
+import org.deeplearning4j.optimize.listeners.PerformanceListener;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.parallelism.ParallelWrapper;
+import org.deeplearning4j.zoo.ZooModel;
+import org.deeplearning4j.zoo.model.InceptionResNetV1;
+import org.deeplearning4j.zoo.model.VGG16;
 import org.nd4j.jita.conf.CudaEnvironment;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -35,107 +40,51 @@ import java.util.Random;
  */
 
 public class Main {
-    private static int picturesPerIteration = 60;
-    private static int iterationsAmount = 9;
+    private static int picturesPerIteration = 180;
+    private static int iterationsAmount = 3;
+    private static final double correctValue = 0.8, wrongValue = 0.1;
     private static int car_correct = 500;
     private static int flower_correct = 840;
     private static int airplane_correct = 530;
     static List<File> carFiles, flowerFiles, airplaneFiles;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
-    public static void main(String[] args) throws Exception{
+    public static void main(String[] args) {
         System.setProperty("org.bytedeco.javacpp.maxphysicalbytes", "0");
         System.setProperty("org.bytedeco.javacpp.maxbytes", "0");
         CudaEnvironment.getInstance().getConfiguration().allowMultiGPU(true).setMaximumDeviceCache(2L * 1024L * 1024L * 1024L).allowCrossDeviceAccess(true);
-        carFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\car");
-        flowerFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\flower");
+        carFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\car\\");
+        flowerFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\flower\\");
         airplaneFiles = getFiles("C:\\Users\\Rubil\\Documents\\NeuralNetworkProjects\\images\\airplane\\");
         int nChannels = 1;
         int outputNum = 3;
         int batchSize = 128;
-        int nEpochs = 5;
-        int inputHeight = 100, inputWidth  = 100;
+        int nEpochs = 10;
+        int inputHeight = 160, inputWidth  = 160;
         int seed = (new Random()).nextInt();
-        System.out.println("Building model....");
-        MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
+        InceptionResNetV1 zooModel = InceptionResNetV1.builder()
+                .numClasses(outputNum)
                 .seed(seed)
-                .l2(0.0005)
-                .weightInit(WeightInit.XAVIER)
-                .updater(new Nesterovs.Builder().learningRate(.01).build())
-                .biasUpdater(new Nesterovs.Builder().learningRate(0.02).build())
-                .list()
-                .layer(0, new ConvolutionLayer.Builder(11, 11)
-                        //nIn and nOut specify depth. nIn here is the nChannels and nOut is the number of filters to be applied
-                        .nIn(nChannels)
-                        .stride(1, 1)
-                        .nOut(128)
-                        .activation(Activation.IDENTITY)
-                        .build())
-                .layer(1, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
-                        .kernelSize(2,2)
-                        .stride(2,2)
-                        .build())
-                .layer(2, new ConvolutionLayer.Builder(8, 8)
-                        //Note that nIn need not be specified in later layers
-                        .stride(1, 1)
-                        .nOut(256)
-                        .activation(Activation.IDENTITY)
-                        .build())
-                .layer(3, new SubsamplingLayer.Builder(SubsamplingLayer.PoolingType.MAX)
-                        .kernelSize(2,2)
-                        .stride(2,2)
-                        .build())
-                .layer(4, new ConvolutionLayer.Builder(4, 4)
-                        .stride(1, 1)
-                        .nOut(128)
-                        .activation(Activation.IDENTITY).build())
-                .layer(5, new DenseLayer.Builder().activation(Activation.RELU)
-                        .nOut(300).build())
-                .layer(6, new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
-                        .nOut(outputNum)
-                        .activation(Activation.SOFTMAX)
-                        .build())
-                .setInputType(InputType.convolutionalFlat(100,100,1)) //See note below
-                .backprop(true).pretrain(false).build();
-        MultiLayerNetwork model = new MultiLayerNetwork(conf);
+                .inputShape(new int[]{nChannels, inputHeight, inputWidth})
+                .build();
+        ComputationGraph model = zooModel.init();
         model.init();
-        System.out.println("Loading data....");
-        List<DataSetIterator> data = new ArrayList<>();
-        for (int i = 0; i < iterationsAmount; i++) {
-            DataSetIterator Train = new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3);
-            data.add(setImagesTrain((ImageDataSetIterator) Train, i));
-        }
-        DataSetIterator Test = new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3);
-        Test = setImagesTest((ImageDataSetIterator) Test);
-
-        // ParallelWrapper will take care of load balancing between GPUs.
-        ParallelWrapper wrapper = new ParallelWrapper.Builder(model)
-            // DataSets prefetching options. Set this value with respect to number of actual devices
-            .prefetchBuffer(128)
-
-            // set number of workers equal to number of available devices. x1-x2 are good values to start with
-            .workers(3)
-
-            // rare averaging improves performance, but might reduce model accuracy
-            .averagingFrequency(2)
-
-            // if set to TRUE, on every averaging model score will be reported
-            .reportScoreAfterAveraging(true)
-
-            .build();
         System.out.println("Training model....");
         model.setListeners(new ScoreIterationListener(100));
         long timeX = System.currentTimeMillis();
-
-        // optionally you might want to use MultipleEpochsIterator instead of manually iterating/resetting over your iterator
         //MultipleEpochsIterator mnistMultiEpochIterator = new MultipleEpochsIterator(nEpochs, mnistTrain);
-
         for( int i=0; i<nEpochs; i++ ) {
             System.out.println("new Epoch " + i);
             long time1 = System.currentTimeMillis();
-            // Please note: we're feeding ParallelWrapper with iterator, not model directly
-//            wrapper.fit(mnistMultiEpochIterator);
+            ParallelWrapper wrapper = new ParallelWrapper.Builder(model)
+                    .prefetchBuffer(128)
+                    .workers(3)
+                    .trainingMode(ParallelWrapper.TrainingMode.SHARED_GRADIENTS)
+                    .averagingFrequency(2)
+                    .reportScoreAfterAveraging(true)
+                    .build();
             for (int j = 0; j < iterationsAmount; j++) {
-                wrapper.fit(data.get(j));
+                DataSetIterator Train =setImagesTrain(new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3), j);
+                wrapper.fit(Train);
             }
             long time2 = System.currentTimeMillis();
             System.out.printf("*** Completed epoch {}, time: {} ***", i, (time2 - time1)/1000 + " sec");
@@ -143,14 +92,10 @@ public class Main {
         long timeY = System.currentTimeMillis();
 
         System.out.printf("*** Training complete, time: {} ***", (timeY - timeX));
-
+        DataSetIterator Test = new ImageDataSetIterator(batchSize, inputHeight, inputWidth, 3);
+        Test = setImagesTest((ImageDataSetIterator) Test);
         log.info("Evaluate model....");
-        Evaluation eval = new Evaluation(outputNum);
-        while(Test.hasNext()){
-            DataSet ds = Test.next();
-            INDArray output = model.output(ds.getFeatureMatrix(), false);
-            eval.eval(ds.getLabels(), output);
-        }
+        Evaluation eval = model.evaluate(Test);
         log.info(eval.stats());
         Test.reset();
 
@@ -172,19 +117,19 @@ public class Main {
         ArrayList<double[]> outs = new ArrayList<>();
         for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(carFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{1.0, 0.0, 0.0});
+            outs.add(new double[]{correctValue, wrongValue, wrongValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
         for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(flowerFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{0.0, 1.0, 0.0});
+            outs.add(new double[]{wrongValue, correctValue, wrongValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
         for (int i = picturesPerIteration*iteration; i < picturesPerIteration*(iteration+1); i++) {
             paths.add(airplaneFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{0.0, 0.0, 1.0});
+            outs.add(new double[]{wrongValue, wrongValue, correctValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         return input;
@@ -196,19 +141,19 @@ public class Main {
         ArrayList<double[]> outs = new ArrayList<>();
         for (int i = car_correct; i < carFiles.size(); i++) {
             paths.add(carFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{1.0, 0.0, 0.0});
+            outs.add(new double[]{correctValue, wrongValue, wrongValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
         for (int i = flower_correct; i < flowerFiles.size(); i++) {
             paths.add(flowerFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{0.0, 1.0, 0.0});
+            outs.add(new double[]{wrongValue, correctValue, wrongValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         paths = new ArrayList<>(); outs = new ArrayList<>();
         for (int i = airplane_correct; i < airplaneFiles.size(); i++) {
             paths.add(airplaneFiles.get(i).getAbsolutePath());
-            outs.add(new double[]{0.0, 0.0, 1.0});
+            outs.add(new double[]{wrongValue, wrongValue, correctValue});
         }
         input.addDataString((List<String>) paths.clone(), (List<double[]>) outs.clone());
         return input;

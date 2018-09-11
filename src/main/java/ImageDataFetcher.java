@@ -14,7 +14,8 @@ import java.util.List;
 
 public class ImageDataFetcher extends BaseDataFetcher {
     private int height, width;
-    private List<double[]> inputs, outputs;
+    private List<double[][]> inputs;
+    private List<double[]> outputs;
     public ImageDataFetcher(int height, int width, int classesAmount){
         this.cursor = 0;
         inputs = new ArrayList<>();
@@ -40,13 +41,14 @@ public class ImageDataFetcher extends BaseDataFetcher {
     }
 
     public void addImageData(List<BufferedImage> input, List<double[]> output) {
-        List<double[]> imgData = convertData(input);
+        List<double[][]> imgData = convertData(input);
         List<Integer> wrongIndexes = new ArrayList<>();
         for (int i = 0; i < imgData.size(); i++) {
             if (imgData.get(i) == null)
                 wrongIndexes.add(i);
         }
-        List<double[]> newInputs = new ArrayList<>(), newOuts = new ArrayList<>();
+        List<double[][]> newInputs = new ArrayList<>();
+        List<double[]> newOuts = new ArrayList<>();
         for (int i = 0; i < input.size(); i++) {
             if (wrongIndexes.contains(i)){continue;}
             newInputs.add(imgData.get(i));
@@ -54,17 +56,18 @@ public class ImageDataFetcher extends BaseDataFetcher {
         }
         inputs.addAll(newInputs);
         outputs.addAll(newOuts);
-        dataStorage<List<double[]>, List<double[]>> mixedData = mixData(inputs, outputs);
+        dataStorage<List<double[][]>, List<double[]>> mixedData = mixData(inputs, outputs);
         inputs = mixedData.getKey();
         outputs = mixedData.getValue();
         this.totalExamples = inputs.size();
     }
 
-    private dataStorage<List<double[]>, List<double[]>> mixData(List<double[]> inps, List<double[]> outs){
+    private dataStorage<List<double[][]>, List<double[]>> mixData(List<double[][]> inps, List<double[]> outs){
         List<Integer> indexes =new ArrayList<>();
         for (int i = 0; i < inps.size(); i++) { indexes.add(i); }
         Collections.shuffle(indexes);
-        List<double[]> mixedInps = new ArrayList<>(), mixedOuts = new ArrayList<>();
+        List<double[][]> mixedInps = new ArrayList<>();
+        List<double[]> mixedOuts = new ArrayList<>();
         for(int index: indexes){
             mixedInps.add(inps.get(index).clone());
             mixedOuts.add(outs.get(index).clone());
@@ -72,15 +75,15 @@ public class ImageDataFetcher extends BaseDataFetcher {
         return new dataStorage<>(mixedInps, mixedOuts);
     }
 
-    public List<double[]> convertData(List<BufferedImage> input) {
-        List<double[]> ret = new ArrayList<>();
+    public List<double[][]> convertData(List<BufferedImage> input) {
+        List<double[][]> ret = new ArrayList<>();
         for (int i = 0; i < input.size(); i++) {
             ret.add(extractImage(input.get(i)));
         }
         return ret;
     }
 
-    public double[] extractImage(BufferedImage image) {
+    public double[][] extractImage(BufferedImage image) {
         try {
             BufferedImage dimg = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = dimg.createGraphics();
@@ -90,10 +93,10 @@ public class ImageDataFetcher extends BaseDataFetcher {
             int[] prePixels = new int[height*width];
             PixelGrabber pgb = new PixelGrabber(dimg, 0, 0, width, height, prePixels, 0, width);
             pgb.grabPixels();
-            double[] pixels = new double[height*width];
+            double[][] pixels = new double[height][width];
             int counter = 0;
             for(int item: prePixels){
-                pixels[counter] = -13* Math.pow(10, -8)*(double)item-1.2;
+                pixels[counter%width][(counter-counter%width)/width] = -8* Math.pow(10, -8)*(double)item-1.0;
                 counter++;
             }
             return pixels;
@@ -106,10 +109,11 @@ public class ImageDataFetcher extends BaseDataFetcher {
         if (!this.hasMore()){
             throw new IllegalStateException("Unable to get more; there are no more images");
         }
-        double[][] inps = new double[amount][this.inputColumns];
+        if (amount>this.totalExamples+cursor){amount = this.totalExamples-cursor;}
+        double[][][][] inps = new double[amount][1][height][width];
         double[][] outs = new double[amount][this.numOutcomes];
         for (int i = 0; i < amount && this.hasMore(); i++) {
-            inps[i] = inputs.get(this.cursor).clone();
+            inps[i] = new double[][][]{inputs.get(this.cursor).clone()};
             outs[i] = outputs.get(this.cursor).clone();
             this.cursor++;
         }
