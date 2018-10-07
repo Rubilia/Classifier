@@ -1,32 +1,15 @@
-import org.deeplearning4j.datasets.iterator.impl.MnistDataSetIterator;
 import org.deeplearning4j.eval.Evaluation;
-import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
-import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
-import org.deeplearning4j.nn.conf.inputs.InputType;
-import org.deeplearning4j.nn.conf.layers.ConvolutionLayer;
-import org.deeplearning4j.nn.conf.layers.DenseLayer;
-import org.deeplearning4j.nn.conf.layers.OutputLayer;
-import org.deeplearning4j.nn.conf.layers.SubsamplingLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
-import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
-import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.PerformanceListener;
-import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.parallelism.ParallelWrapper;
 import org.deeplearning4j.zoo.ZooModel;
 import org.deeplearning4j.zoo.model.InceptionResNetV1;
-import org.deeplearning4j.zoo.model.VGG16;
 import org.nd4j.jita.conf.CudaEnvironment;
-import org.nd4j.linalg.activations.Activation;
-import org.nd4j.linalg.api.ndarray.INDArray;
-import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
-import org.nd4j.linalg.learning.config.Nesterovs;
-import org.nd4j.linalg.lossfunctions.LossFunctions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -37,12 +20,11 @@ import java.util.Random;
  */
 
 public class Main {
-    private static int picturesPerIteration = 80;
-    private static int iterationsAmount = 1;
+    private static int picturesPerIteration = 900;
     private static final double correctValue = 0.9, wrongValue = 0.1;
     static List<File> catFiels, dogFiels;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         System.setProperty("org.bytedeco.javacpp.maxphysicalbytes", "0");
         System.setProperty("org.bytedeco.javacpp.maxbytes", "0");
         CudaEnvironment.getInstance().getConfiguration().allowMultiGPU(true).setMaximumDeviceCache(2L * 1024L * 1024L * 1024L).allowCrossDeviceAccess(true);
@@ -59,9 +41,7 @@ public class Main {
         ComputationGraph model = inception.init();
         model.setListeners(new PerformanceListener(1, true));
         log.info("Loading training data....");
-        DataSetIterator Train =setImagesTrain(new ImageDataSetIterator(batchSize, inputHeight, inputWidth, outputNum), 0, 1200);
-        DataSetIterator mnistTrain = new MnistDataSetIterator(batchSize,true,12345);
-        INDArray mnistData = mnistTrain.next().getFeatures(), data = Train.next().getFeatures();
+        DataSetIterator Train;
         System.out.println("Training model....");
         long timeX = System.currentTimeMillis();
         for( int i=0; i<nEpochs; i++ ) {
@@ -73,8 +53,12 @@ public class Main {
                     .averagingFrequency(2)
                     .reportScoreAfterAveraging(true)
                     .build();
-            for (int j = 0; j < iterationsAmount; j++) {
-                wrapper.fit(Train);
+            for (int j = 0; j < nEpochs; j++) {
+                for (int k = 0; k < (catFiels.size()+dogFiels.size())/picturesPerIteration-1; k++) {
+                    Train = setImagesTrain(new ImageDataSetIterator(batchSize, inputHeight, inputWidth, outputNum), 0, picturesPerIteration);
+                    wrapper.fit(Train);
+                    Train.reset();
+                }
             }
             long time2 = System.currentTimeMillis();
             System.out.printf("*** Completed epoch {}, time: {} ***", i, (time2 - time1)/1000 + " sec");
